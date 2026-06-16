@@ -35,6 +35,22 @@ const QUERIES = [
   { q: 'language:rus AND subject:essay', genre: 'Нон-фикшн' },
   { q: 'language:rus AND subject:mythology', genre: 'Фольклор' },
   { q: 'language:rus AND subject:"graphic novels"', genre: 'Комиксы' },
+  { q: 'subject:"русская литература"', genre: 'Русская литература' },
+  { q: 'subject:"советская литература"', genre: 'Русская литература' },
+  { q: 'subject:"русская поэзия"', genre: 'Поэзия' },
+  { q: 'subject:"русская проза"', genre: 'Проза' },
+  { q: 'subject:"русская классика"', genre: 'Классика' },
+  { q: 'subject:"русский роман"', genre: 'Романтика' },
+  { q: 'subject:"русское фэнтези"', genre: 'Фэнтези' },
+  { q: 'subject:"россия"', genre: 'История' },
+  { q: 'subject:"советский союз"', genre: 'История' },
+  { q: 'subject:"русский"', genre: 'Проза' },
+  { q: 'subject:"российская"', genre: 'История' },
+  { q: 'subject:"советская"', genre: 'История' },
+  { q: 'subject:"петербург"', genre: 'История' },
+  { q: 'subject:"москва"', genre: 'История' },
+  { q: 'subject:"русские"', genre: 'Проза' },
+  { q: 'subject:"советский"', genre: 'История' },
 ];
 
 const FIELDS = [
@@ -110,13 +126,21 @@ function hasCyrillic(text) {
   return /[\u0400-\u04FF]/.test(text)
 }
 
+function hasMojibake(text) {
+  return /[¿¡]/.test(text)
+}
+
 function isGoodBook(doc, title) {
   if (!title || title.length < 2) return false
   if (title.includes('?')) return false
-  
+  if (hasMojibake(title)) return false
+
   const author = (doc.author_name || [''])[0] || ''
+  if (hasMojibake(author)) return false
   if (author.length > 20) return false
-  
+
+  if (!hasCyrillic(title) && !hasCyrillic(author)) return false
+
   return true
 }
 
@@ -141,12 +165,6 @@ async function main() {
       for (const doc of data.docs) {
         const workId = (doc.key || '').replace('/works/', '')
         if (seenWorkIds.has(workId)) continue
-
-        const lang = detectBookLanguage(doc.language)
-        if (lang !== 'ru') {
-          seenWorkIds.add(workId)
-          continue
-        }
 
         const title = (doc.title || '').trim()
         if (!isGoodBook(doc, title)) { seenWorkIds.add(workId); continue }
