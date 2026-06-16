@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BookHaven — Бесплатная библиотека</title>
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="cursor-glow"></div>
+
+  <nav class="navbar">
+    <div class="nav-container">
+      <a class="nav-brand" href="#">
+        <div class="brand-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <rect x="4" y="6" width="24" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M16 10v12M10 14h4M10 18h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M22 14h-4M22 18h-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+          </svg>
+        </div>
+        <span class="brand-text">BookHaven</span>
+      </a>
+      <div class="nav-stats">
+        <span id="bookCount">0</span> книг
+      </div>
+      <a class="nav-gh" href="https://github.com" target="_blank" rel="noopener">
+        <i class="fab fa-github"></i>
+      </a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-content">
+      <div class="hero-badge">
+        <i class="fas fa-book-open"></i>
+        Бесплатная библиотека
+      </div>
+      <h1 class="hero-title">
+        <span class="title-line">Книжный</span>
+        <span class="title-line accent">Мир</span>
+      </h1>
+      <p class="hero-subtitle">
+        Коллекция классической и не очень классической литературы в различных форматах — 
+        <span class="text-gradient">читай где угодно</span>
+      </p>
+      <div class="search-wrapper">
+        <div class="search-box">
+          <i class="fas fa-search search-icon"></i>
+          <input type="text" id="searchInput" class="search-input" 
+                 placeholder="Поиск по названию, автору..." autocomplete="off">
+          <button class="search-clear" id="searchClear">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="search-hints" id="searchHints"></div>
+      </div>
+    </div>
+    <div class="hero-scroll">
+      <div class="scroll-mouse">
+        <div class="scroll-dot"></div>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <section class="controls-section">
+      <div class="controls-header">
+        <h2 class="section-title">
+          <i class="fas fa-filter"></i>
+          Фильтры
+        </h2>
+        <div class="controls-actions">
+          <span class="results-count" id="resultsCount">Найдено: <strong>0</strong></span>
+          <button class="btn btn-ghost" id="resetFilters">
+            <i class="fas fa-undo"></i> Сбросить
+          </button>
+        </div>
+      </div>
+      <div class="genre-pills" id="genrePills"></div>
+      <div class="controls-bottom">
+        <div class="format-filter">
+          <label class="format-label">Формат загрузки:</label>
+          <div class="format-toggle" id="formatToggle">
+            <button class="format-btn active" data-format="txt">TXT</button>
+            <button class="format-btn" data-format="fb2">FB2</button>
+            <button class="format-btn" data-format="epub">EPUB</button>
+            <button class="format-btn" data-format="mobi">MOBI</button>
+            <button class="format-btn" data-format="pdf">PDF</button>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="downloadGenreBtn" disabled>
+          <i class="fas fa-download"></i>
+          Скачать жанр
+          <span class="btn-badge" id="genreDownloadBadge">ZIP</span>
+        </button>
+      </div>
+    </section>
+
+    <section class="books-section">
+      <div class="books-grid" id="booksGrid"></div>
+      <div class="loading-state" id="loadingState">
+        <div class="loader">
+          <div class="loader-book">
+            <i class="fas fa-book"></i>
+          </div>
+        </div>
+        <p>Загружаем библиотеку...</p>
+      </div>
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">
+          <i class="fas fa-search"></i>
+        </div>
+        <h3>Ничего не найдено</h3>
+        <p>Попробуйте изменить параметры поиска</p>
+        <button class="btn btn-primary" id="emptyReset">Показать все книги</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-brand">
+        <div class="brand-icon">
+          <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+            <rect x="4" y="6" width="24" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M16 10v12M10 14h4M10 18h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span>BookHaven</span>
+      </div>
+      <p class="footer-text">
+        Все книги находятся в общественном достоянии.
+        <br>Проект с ❤️ для любителей чтения.
+      </p>
+      <div class="footer-links">
+        <a href="https://www.gutenberg.org" target="_blank" rel="noopener">Project Gutenberg</a>
+        <a href="#" id="scrollTop">Наверх</a>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
