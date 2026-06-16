@@ -2,6 +2,7 @@ const state = {
   books: [],
   filtered: [],
   activeGenres: new Set(),
+  activeLanguages: new Set(),
   selectedFormat: 'txt',
   searchTerm: '',
   loading: true
@@ -111,6 +112,7 @@ async function loadBooks() {
     showLoading(false)
     applyFilters()
     renderGenrePills()
+    renderLangPills()
     updateBookCount()
   } catch (err) {
     console.error(err)
@@ -148,6 +150,41 @@ function renderGenrePills() {
   })
 }
 
+function renderLangPills() {
+  const allLangs = new Set()
+  state.books.forEach(b => { if (b.language) allLangs.add(b.language) })
+  const labels = { ru: 'Русский', en: 'English', de: 'Deutsch', fr: 'Français', es: 'Español' }
+  const counts = {}
+  state.books.forEach(b => { if (b.language) counts[b.language] = (counts[b.language] || 0) + 1 })
+  const sorted = [...allLangs].sort()
+  const container = $1('#langPills')
+  if (!container) return
+  if (sorted.length <= 1) { container.parentElement.style.display = 'none'; return }
+  container.parentElement.style.display = ''
+  container.innerHTML = ''
+  sorted.forEach(lang => {
+    const btn = document.createElement('button')
+    btn.className = 'lang-pill' + (state.activeLanguages.has(lang) ? ' active' : '')
+    btn.dataset.lang = lang
+    const label = labels[lang] || lang.toUpperCase()
+    btn.innerHTML = `${label} <span class="pill-count">${counts[lang] || 0}</span>`
+    btn.addEventListener('click', () => toggleLang(lang))
+    container.appendChild(btn)
+  })
+}
+
+function toggleLang(lang) {
+  if (state.activeLanguages.has(lang)) {
+    state.activeLanguages.delete(lang)
+  } else {
+    state.activeLanguages.add(lang)
+  }
+  applyFilters()
+  document.querySelectorAll('.lang-pill').forEach(el => {
+    el.classList.toggle('active', state.activeLanguages.has(el.dataset.lang))
+  })
+}
+
 function toggleGenre(genre) {
   if (state.activeGenres.has(genre)) {
     state.activeGenres.delete(genre)
@@ -175,6 +212,9 @@ function applyFilters() {
     filtered = filtered.filter(b =>
       getGenres(b).some(g => state.activeGenres.has(g))
     )
+  }
+  if (state.activeLanguages.size > 0) {
+    filtered = filtered.filter(b => state.activeLanguages.has(b.language))
   }
   state.filtered = filtered
   renderBooks(filtered)
@@ -379,12 +419,14 @@ function initScrollEffects() {
 function initReset() {
   const handlers = [() => {
     state.activeGenres.clear()
+    state.activeLanguages.clear()
     state.searchTerm = ''
     const inp = $1('#searchInput')
     if (inp) { inp.value = ''; $1('#searchClear').classList.remove('visible') }
     const h = $1('#searchHints')
     if (h) { h.classList.remove('active'); h.innerHTML = '' }
     document.querySelectorAll('.genre-pill').forEach(el => el.classList.remove('active'))
+    document.querySelectorAll('.lang-pill').forEach(el => el.classList.remove('active'))
     applyFilters()
     updateArchiveBtn()
     $1('.controls-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' })
