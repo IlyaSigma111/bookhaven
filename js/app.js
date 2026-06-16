@@ -599,12 +599,17 @@ function initArchiveBtn() {
 }
 
 let readerBookId = null
+let curReaderBook = null
 
 function initReader() {
   const closeBtn = $1('#readerClose')
   const overlay = $1('#readerOverlay')
+  const dlBtn = $1('#readerDownload')
   if (closeBtn) closeBtn.addEventListener('click', closeReader)
   if (overlay) overlay.addEventListener('click', closeReader)
+  if (dlBtn) dlBtn.addEventListener('click', () => {
+    if (curReaderBook) tryDownloadBook(curReaderBook)
+  })
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeReader()
   })
@@ -614,14 +619,15 @@ function openReader(book) {
   const modal = $1('#readerModal')
   const title = $1('#readerTitle')
   const author = $1('#readerAuthor')
-  const body = $1('#readerBody')
+  const inner = $1('#readerBodyInner')
   const status = $1('#readerStatus')
-  if (!modal) return
+  if (!modal || !inner) return
 
-  readerBookId = book.gutenberg || book.ia || null
+  curReaderBook = book
+  readerBookId = book.gutenberg || book.ia || book.id || null
   title.textContent = book.title || ''
   author.textContent = book.author || ''
-  body.innerHTML = `
+  inner.innerHTML = `
     <div class="reader-loading">
       <div class="loader"><div class="loader-book"><i class="fas fa-book"></i></div></div>
       <p>Загружаем текст...</p>
@@ -635,11 +641,11 @@ function openReader(book) {
   const hasIa = book.ia && book.ia.length > 0
 
   if (hasGut) {
-    fetchGutenbergText(book.gutenberg, body, status)
+    fetchGutenbergText(book.gutenberg, inner, status)
   } else if (hasIa) {
-    fetchIaText(book.ia, body, status, book)
+    fetchIaText(book.ia, inner, status, book)
   } else {
-    body.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Текст недоступен</p></div>'
+    showReaderFallback(inner, book)
   }
 }
 
@@ -648,6 +654,42 @@ function closeReader() {
   if (modal) modal.classList.remove('active')
   document.body.style.overflow = ''
   readerBookId = null
+  curReaderBook = null
+}
+
+function showReaderFallback(inner, book) {
+  const pageUrl = book.gutenberg > 0
+    ? `https://www.gutenberg.org/ebooks/${book.gutenberg}`
+    : (book.ia ? `https://archive.org/details/${book.ia}` : null)
+  inner.innerHTML = `
+    <div class="reader-loading" style="gap:20px">
+      <div style="font-size:2.5rem;opacity:0.3"><i class="fas fa-book-open"></i></div>
+      <p style="text-indent:0;font-family:var(--font-sans);color:rgba(255,255,255,0.4)">
+        Текст недоступен для онлайн-чтения
+      </p>
+      ${pageUrl ? `<a class="btn" href="${pageUrl}" target="_blank" rel="noopener" style="border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);padding:10px 24px">
+        <i class="fas fa-external-link-alt"></i> Открыть в источнике
+      </a>` : ''}
+    </div>
+  `
+}
+
+function tryDownloadBook(book) {
+  const url = getFormatUrl(book, 'txt') || getFormatUrl(book, 'epub') || getFormatUrl(book, 'mobi')
+  if (url) {
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener'
+    a.click()
+  } else {
+    const pageUrl = book.gutenberg > 0
+      ? `https://www.gutenberg.org/ebooks/${book.gutenberg}`
+      : (book.ia ? `https://archive.org/details/${book.ia}` : null)
+    if (pageUrl) {
+      window.open(pageUrl, '_blank')
+    }
+  }
 }
 
 /* Detail Modal */
@@ -739,21 +781,28 @@ function openDetail(book) {
         <div class="meta-label">Рейтинг</div>
       </div>
     </div>
-    ${canRead ? `
     <div class="detail-section detail-inline-reader">
       <button class="detail-reader-toggle" id="readerToggle">
         <i class="fas fa-book-open-reader"></i>
-        <span>Читать онлайн</span>
+        <span>${canRead ? 'Читать онлайн' : 'Где читать?'}</span>
         <i class="fas fa-chevron-down toggle-arrow"></i>
       </button>
       <div class="detail-reader-body" id="detailReaderBody">
+        ${canRead ? `
         <div class="reader-loading">
           <div class="loader"><div class="loader-book"><i class="fas fa-book"></i></div></div>
           <p>Загружаем текст...</p>
         </div>
+        ` : `
+        <div class="reader-loading" style="gap:20px;padding:30px 20px">
+          <div style="font-size:2rem;opacity:0.2"><i class="fas fa-external-link-alt"></i></div>
+          <p style="text-indent:0;font-family:var(--font-sans);color:rgba(255,255,255,0.35)">
+            Эта книга доступна для чтения во внешних источниках
+          </p>
+        </div>
+        `}
       </div>
     </div>
-    ` : ''}
     <div class="detail-reviews">
       <div class="detail-section-title"><i class="fas fa-comments"></i> Отзывы</div>
       <div class="review-list" id="reviewList">${reviewList || '<div class="review-placeholder"><i class="fas fa-comment-dots"></i><p>Пока нет отзывов. Будьте первым!</p></div>'}</div>
@@ -778,16 +827,17 @@ function openDetail(book) {
   })
 
   const toggle = inner.querySelector('#readerToggle')
-  const readerBody = inner.querySelector('#detailReaderBody')
-  if (toggle && readerBody) {
+  const detailReaderBody = inner.querySelector('#detailReaderBody')
+  if (toggle && detailReaderBody) {
     let loaded = false
     toggle.addEventListener('click', () => {
-      const isOpen = readerBody.classList.toggle('open')
+      const isOpen = detailReaderBody.classList.toggle('open')
       toggle.querySelector('.toggle-arrow').style.transform = isOpen ? 'rotate(180deg)' : ''
       if (isOpen && !loaded) {
         loaded = true
-        if (hasGut) fetchGutenbergText(book.gutenberg, readerBody, null)
-        else if (hasIa) fetchIaText(book.ia, readerBody, null, book)
+        if (hasGut) fetchGutenbergText(book.gutenberg, detailReaderBody, null)
+        else if (hasIa) fetchIaText(book.ia, detailReaderBody, null, book)
+        // else: fallback content already in HTML
       }
     })
   }
@@ -803,7 +853,7 @@ function closeDetail() {
   document.body.style.overflow = ''
 }
 
-async function fetchGutenbergText(id, bodyEl, statusEl) {
+async function fetchGutenbergText(id, containerEl, statusEl) {
   const url = `https://www.gutenberg.org/cache/epub/${id}/pg${id}.txt`
   try {
     const ctrl = new AbortController()
@@ -815,17 +865,13 @@ async function fetchGutenbergText(id, bodyEl, statusEl) {
     }
     let text = await res.text()
     text = processGutenbergText(text)
-    renderReaderText(text, bodyEl, statusEl, id)
+    renderReaderText(text, containerEl, statusEl)
   } catch (err) {
-    if (err.name === 'AbortError') {
-      bodyEl.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Превышено время ожидания</p></div>'
-    } else {
-      bodyEl.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Не удалось загрузить текст</p></div>'
-    }
+    showReaderError(containerEl, statusEl, 'Не удалось загрузить текст')
   }
 }
 
-async function fetchIaText(iaId, bodyEl, statusEl, book) {
+async function fetchIaText(iaId, containerEl, statusEl, book) {
   const url = `https://archive.org/stream/${iaId}/${iaId}_djvu.txt`
   try {
     const ctrl = new AbortController()
@@ -834,27 +880,17 @@ async function fetchIaText(iaId, bodyEl, statusEl, book) {
     clearTimeout(to)
     const text = await res.text()
     if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
-      bodyEl.innerHTML = `
-        <div class="reader-loading" style="gap:16px">
-          <p style="color:var(--text-muted)">Текст доступен только на Archive.org</p>
-          <a class="format-badge" href="https://archive.org/details/${iaId}" target="_blank" rel="noopener" style="padding:10px 24px;font-size:0.9rem">
-            <i class="fas fa-external-link-alt"></i> Открыть на Archive.org
-          </a>
-        </div>`
-      if (statusEl) statusEl.textContent = '✗'
+      showReaderError(containerEl, statusEl, 'Текст доступен только на Archive.org', `https://archive.org/details/${iaId}`)
       return
     }
     const clean = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
-    renderReaderText(clean, bodyEl, statusEl, iaId)
+    if (clean.length < 100) {
+      showReaderError(containerEl, statusEl, 'Текст недоступен', `https://archive.org/details/${iaId}`)
+      return
+    }
+    renderReaderText(clean, containerEl, statusEl)
   } catch (err) {
-    bodyEl.innerHTML = `
-      <div class="reader-loading" style="gap:16px">
-        <p style="color:var(--red)">Не удалось загрузить текст</p>
-        <a class="format-badge" href="https://archive.org/details/${iaId}" target="_blank" rel="noopener" style="padding:10px 24px;font-size:0.9rem">
-          <i class="fas fa-external-link-alt"></i> Открыть на Archive.org
-        </a>
-      </div>`
-    if (statusEl) statusEl.textContent = '✗'
+    showReaderError(containerEl, statusEl, 'Не удалось загрузить текст', `https://archive.org/details/${iaId}`)
   }
 }
 
@@ -875,20 +911,39 @@ function processGutenbergText(text) {
   return content
 }
 
-function renderReaderText(text, bodyEl, statusEl, id) {
+function showReaderError(containerEl, statusEl, msg, linkUrl) {
+  containerEl.innerHTML = `
+    <div class="reader-loading" style="gap:20px">
+      <div style="font-size:2.5rem;opacity:0.2"><i class="fas fa-exclamation-circle"></i></div>
+      <p style="text-indent:0;font-family:var(--font-sans);color:rgba(255,255,255,0.35)">
+        ${escape(msg)}
+      </p>
+      ${linkUrl ? `<a href="${escape(linkUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:10px 24px;border-radius:8px;border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.5);text-decoration:none;font-size:0.85rem;font-family:var(--font-sans);transition:all 0.2s">
+        <i class="fas fa-external-link-alt"></i> Открыть в источнике
+      </a>` : ''}
+    </div>
+  `
+  if (statusEl) statusEl.textContent = '\u2717'
+}
+
+function renderReaderText(text, containerEl, statusEl) {
   const paragraphs = text.split(/\n\n+/).filter(p => p.trim())
   if (paragraphs.length === 0) {
-    bodyEl.innerHTML = '<div class="reader-loading"><p style="color:var(--text-muted)">Текст пуст</p></div>'
+    showReaderError(containerEl, statusEl, 'Текст пуст')
     return
   }
 
-  const headerMark = `<div class="reader-header-mark">— Текст —</div>`
-  const footerMark = `<div class="reader-footer-mark">— Конец текста —</div>`
   const bodyHTML = paragraphs.map(p => `<p>${escape(p.trim())}</p>`).join('')
 
-  bodyEl.innerHTML = headerMark + bodyHTML + footerMark
-  if (statusEl) statusEl.textContent = `${paragraphs.length} абзацев`
-  bodyEl.scrollTop = 0
+  containerEl.innerHTML = `
+    <div class="reader-header-mark">— Чтение —</div>
+    ${bodyHTML}
+    <div class="reader-footer-mark">— Конец текста —</div>
+  `
+  if (statusEl) statusEl.textContent = `${paragraphs.length} абз.`
+  // Scroll to top (find reader-body parent)
+  const readerBody = containerEl.closest('.reader-body')
+  if (readerBody) readerBody.scrollTop = 0
 }
 
 function toast(msg, type = 'info') {

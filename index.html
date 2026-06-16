@@ -158,18 +158,26 @@
     <div class="reader-container">
       <div class="reader-header">
         <div class="reader-meta">
+          <i class="fas fa-book-open reader-meta-icon"></i>
           <h3 class="reader-title" id="readerTitle"></h3>
           <span class="reader-author" id="readerAuthor"></span>
         </div>
         <div class="reader-actions">
           <span class="reader-status" id="readerStatus"></span>
-          <button class="reader-close" id="readerClose"><i class="fas fa-times"></i></button>
+          <button class="reader-action-btn" id="readerDownload" title="Скачать">
+            <i class="fas fa-download"></i>
+          </button>
+          <button class="reader-action-btn close-btn" id="readerClose" title="Закрыть (Esc)">
+            <i class="fas fa-times"></i>
+          </button>
         </div>
       </div>
       <div class="reader-body" id="readerBody">
-        <div class="reader-loading">
-          <div class="loader"><div class="loader-book"><i class="fas fa-book"></i></div></div>
-          <p>Загружаем текст...</p>
+        <div class="reader-body-inner" id="readerBodyInner">
+          <div class="reader-loading">
+            <div class="loader"><div class="loader-book"><i class="fas fa-book"></i></div></div>
+            <p>Загружаем текст...</p>
+          </div>
         </div>
       </div>
     </div>
