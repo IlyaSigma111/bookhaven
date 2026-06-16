@@ -5,7 +5,9 @@ const state = {
   activeLanguages: new Set(),
   selectedFormat: 'txt',
   searchTerm: '',
-  loading: true
+  loading: true,
+  page: 1,
+  perPage: 60
 }
 
 const COVER_COLORS = {
@@ -217,7 +219,9 @@ function applyFilters() {
     filtered = filtered.filter(b => state.activeLanguages.has(b.language))
   }
   state.filtered = filtered
+  state.page = 1
   renderBooks(filtered)
+  renderPagination(filtered)
   updateResults(filtered.length)
 }
 
@@ -231,9 +235,9 @@ function renderBooks(books) {
     return
   }
   if (empty) empty.classList.remove('active')
-  books.forEach((b, i) => {
-    grid.appendChild(createBookCard(b))
-  })
+  const start = (state.page - 1) * state.perPage
+  const page = books.slice(start, start + state.perPage)
+  page.forEach(b => { grid.appendChild(createBookCard(b)) })
   requestAnimationFrame(() => {
     grid.querySelectorAll('.book-card').forEach((el, i) => {
       setTimeout(() => el.classList.add('visible'), i * 25)
@@ -246,7 +250,9 @@ function createBookCard(book) {
   const genres = getGenres(book).slice(0, 3)
   const formats = ['txt', 'epub', 'mobi']
   const hasGut = book.gutenberg > 0
-  const pageUrl = hasGut ? `https://www.gutenberg.org/ebooks/${book.gutenberg}` : null
+  const hasIa = book.ia && book.ia.length > 0
+  const canRead = hasGut || hasIa
+  const pageUrl = hasGut ? `https://www.gutenberg.org/ebooks/${book.gutenberg}` : (hasIa ? `https://archive.org/details/${book.ia}` : null)
 
   const formatHTML = formats.map(f => {
     const url = hasGut ? getFormatUrl(book, f) : null
@@ -282,9 +288,9 @@ function createBookCard(book) {
         <span class="rating-number">${rating.toFixed(1)}</span>
       </div>
       <div class="book-card-formats">
-        ${hasGut ? `<button class="format-badge read-btn" data-id="${book.gutenberg}" data-title="${escape(book.title)}" data-author="${escape(book.author)}"><i class="fas fa-book-open-reader"></i> Читать</button>` : ''}
+        ${canRead ? `<button class="format-badge read-btn"><i class="fas fa-book-open-reader"></i> Читать</button>` : ''}
         ${formatHTML}
-        ${hasGut ? `<a class="format-badge" href="${pageUrl}" target="_blank" rel="noopener" title="Подробнее"><i class="fas fa-external-link-alt"></i></a>` : ''}
+        ${pageUrl ? `<a class="format-badge" href="${pageUrl}" target="_blank" rel="noopener" title="Подробнее"><i class="fas fa-external-link-alt"></i></a>` : ''}
       </div>
     </div>
   `
@@ -303,6 +309,72 @@ function renderStars(r) {
 function escape(t) {
   if (typeof t !== 'string') return t || ''
   return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+}
+
+function renderPagination(books) {
+  const container = $1('#pagination')
+  if (!container) return
+  const total = Math.ceil(books.length / state.perPage)
+  if (total <= 1) { container.classList.remove('active'); return }
+  container.classList.add('active')
+  container.innerHTML = ''
+  const prev = document.createElement('button')
+  prev.className = 'page-btn' + (state.page <= 1 ? ' disabled' : '')
+  prev.innerHTML = '<i class="fas fa-chevron-left"></i>'
+  prev.addEventListener('click', () => goPage(state.page - 1))
+  container.appendChild(prev)
+  const maxVisible = 5
+  let start = Math.max(1, state.page - Math.floor(maxVisible / 2))
+  let end = Math.min(total, start + maxVisible - 1)
+  if (end - start < maxVisible - 1) { start = Math.max(1, end - maxVisible + 1) }
+  if (start > 1) {
+    const first = document.createElement('button')
+    first.className = 'page-btn'
+    first.textContent = '1'
+    first.addEventListener('click', () => goPage(1))
+    container.appendChild(first)
+    if (start > 2) {
+      const dots = document.createElement('span')
+      dots.className = 'page-dots'
+      dots.textContent = '...'
+      container.appendChild(dots)
+    }
+  }
+  for (let i = start; i <= end; i++) {
+    const btn = document.createElement('button')
+    btn.className = 'page-btn' + (i === state.page ? ' active' : '')
+    btn.textContent = i
+    btn.addEventListener('click', () => goPage(i))
+    container.appendChild(btn)
+  }
+  if (end < total) {
+    if (end < total - 1) {
+      const dots = document.createElement('span')
+      dots.className = 'page-dots'
+      dots.textContent = '...'
+      container.appendChild(dots)
+    }
+    const last = document.createElement('button')
+    last.className = 'page-btn'
+    last.textContent = total
+    last.addEventListener('click', () => goPage(total))
+    container.appendChild(last)
+  }
+  const next = document.createElement('button')
+  next.className = 'page-btn' + (state.page >= total ? ' disabled' : '')
+  next.innerHTML = '<i class="fas fa-chevron-right"></i>'
+  next.addEventListener('click', () => goPage(state.page + 1))
+  container.appendChild(next)
+}
+
+function goPage(n) {
+  const total = Math.ceil(state.filtered.length / state.perPage)
+  if (n < 1 || n > total) return
+  state.page = n
+  renderBooks(state.filtered)
+  renderPagination(state.filtered)
+  const grid = $1('#booksGrid')
+  if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 function updateResults(count) {
@@ -533,7 +605,7 @@ function openReader(book) {
   const status = $1('#readerStatus')
   if (!modal) return
 
-  readerBookId = book.gutenberg
+  readerBookId = book.gutenberg || book.ia || null
   title.textContent = book.title || ''
   author.textContent = book.author || ''
   body.innerHTML = `
@@ -546,12 +618,16 @@ function openReader(book) {
   modal.classList.add('active')
   document.body.style.overflow = 'hidden'
 
-  if (!book.gutenberg || book.gutenberg <= 0) {
-    body.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Текст недоступен</p></div>'
-    return
-  }
+  const hasGut = book.gutenberg > 0
+  const hasIa = book.ia && book.ia.length > 0
 
-  fetchReaderText(book.gutenberg, body, status)
+  if (hasGut) {
+    fetchGutenbergText(book.gutenberg, body, status)
+  } else if (hasIa) {
+    fetchIaText(book.ia, body, status, book)
+  } else {
+    body.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Текст недоступен</p></div>'
+  }
 }
 
 function closeReader() {
@@ -561,7 +637,7 @@ function closeReader() {
   readerBookId = null
 }
 
-async function fetchReaderText(id, bodyEl, statusEl) {
+async function fetchGutenbergText(id, bodyEl, statusEl) {
   const url = `https://www.gutenberg.org/cache/epub/${id}/pg${id}.txt`
   try {
     const ctrl = new AbortController()
@@ -580,6 +656,37 @@ async function fetchReaderText(id, bodyEl, statusEl) {
     } else {
       bodyEl.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Не удалось загрузить текст</p></div>'
     }
+  }
+}
+
+async function fetchIaText(iaId, bodyEl, statusEl, book) {
+  const url = `https://archive.org/stream/${iaId}/${iaId}_djvu.txt`
+  try {
+    const ctrl = new AbortController()
+    const to = setTimeout(() => ctrl.abort(), 15000)
+    const res = await fetch(url, { signal: ctrl.signal })
+    clearTimeout(to)
+    const text = await res.text()
+    if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
+      bodyEl.innerHTML = `
+        <div class="reader-loading" style="gap:16px">
+          <p style="color:var(--text-muted)">Текст доступен только на Archive.org</p>
+          <a class="format-badge" href="https://archive.org/details/${iaId}" target="_blank" rel="noopener" style="padding:10px 24px;font-size:0.9rem">
+            <i class="fas fa-external-link-alt"></i> Открыть на Archive.org
+          </a>
+        </div>`
+      return
+    }
+    const clean = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    renderReaderText(clean, bodyEl, statusEl, iaId)
+  } catch (err) {
+    bodyEl.innerHTML = `
+      <div class="reader-loading" style="gap:16px">
+        <p style="color:var(--red)">Не удалось загрузить текст</p>
+        <a class="format-badge" href="https://archive.org/details/${iaId}" target="_blank" rel="noopener" style="padding:10px 24px;font-size:0.9rem">
+          <i class="fas fa-external-link-alt"></i> Открыть на Archive.org
+        </a>
+      </div>`
   }
 }
 
