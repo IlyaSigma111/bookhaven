@@ -42,7 +42,7 @@ const COVER_COLORS = {
   'Роман': { from: '#2d1b2b', to: '#9d174d' },
   'Реализм': { from: '#1e293b', to: '#94a3b8' },
 }
-const DEFAULT_COLOR = { from: '#1e1b4b', to: '#6366f1' }
+const DEFAULT_COLOR = { from: '#7c2d12', to: '#f97316' }
 
 const FORMAT_ICONS = { fb2: 'fa-file-lines', epub: 'fa-book', mobi: 'fa-kindle', pdf: 'fa-file-pdf', txt: 'fa-file-lines' }
 
@@ -83,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initScrollTop()
   initFormatToggle()
   initArchiveBtn()
+  initReader()
 })
 
 function initCursorGlow() {
@@ -217,32 +218,37 @@ function createBookCard(book) {
   const stars = renderStars(book.rating)
   const genresHTML = genres.map(g => `<span class="book-tag">${escape(g)}</span>`).join('')
   const rating = book.rating ?? 0
+  const coverStyle = book.cover_url
+    ? `background-image:url('${book.cover_url}');background-size:cover;background-position:center`
+    : `background:linear-gradient(135deg,${from},${to})`
 
   const card = document.createElement('div')
   card.className = 'book-card'
   card.dataset.bookId = book.id
   card.innerHTML = `
     <div class="book-card-cover">
-      <div class="cover-bg" style="background:linear-gradient(135deg,${from},${to})"></div>
+      <div class="cover-bg" style="${coverStyle}"></div>
       <div class="cover-pattern"></div>
-      <div class="cover-icon"><i class="fas fa-book-open"></i></div>
+      ${book.cover_url ? '' : '<div class="cover-icon"><i class="fas fa-book-open"></i></div>'}
     </div>
     <div class="book-card-body">
       <div class="book-card-category">${genresHTML}</div>
       <h3 class="book-card-title">${escape(book.title)}</h3>
       <p class="book-card-author">${escape(book.author)}</p>
       <p class="book-card-year">${book.year > 0 ? book.year : ''}</p>
-      <p class="book-card-desc">${escape(book.description || '')}</p>
+      <p class="book-card-desc">${escape((book.description || '').substring(0, 200))}</p>
       <div class="book-card-rating">
         <div class="rating-stars">${stars}</div>
         <span class="rating-number">${rating.toFixed(1)}</span>
       </div>
       <div class="book-card-formats">
+        ${hasGut ? `<button class="format-badge read-btn" data-id="${book.gutenberg}" data-title="${escape(book.title)}" data-author="${escape(book.author)}"><i class="fas fa-book-open-reader"></i> Читать</button>` : ''}
         ${formatHTML}
-        ${hasGut ? `<a class="format-badge" href="${pageUrl}" target="_blank" rel="noopener" title="Подробнее" style="flex:1;justify-content:center"><i class="fas fa-external-link-alt"></i> Gutenberg</a>` : ''}
+        ${hasGut ? `<a class="format-badge" href="${pageUrl}" target="_blank" rel="noopener" title="Подробнее"><i class="fas fa-external-link-alt"></i></a>` : ''}
       </div>
     </div>
   `
+  card.querySelector('.read-btn')?.addEventListener('click', () => openReader(book))
   return card
 }
 
@@ -463,6 +469,109 @@ function initArchiveBtn() {
     btn.disabled = false
     btn.innerHTML = orig
   })
+}
+
+let readerBookId = null
+
+function initReader() {
+  const closeBtn = $1('#readerClose')
+  const overlay = $1('#readerOverlay')
+  if (closeBtn) closeBtn.addEventListener('click', closeReader)
+  if (overlay) overlay.addEventListener('click', closeReader)
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeReader()
+  })
+}
+
+function openReader(book) {
+  const modal = $1('#readerModal')
+  const title = $1('#readerTitle')
+  const author = $1('#readerAuthor')
+  const body = $1('#readerBody')
+  const status = $1('#readerStatus')
+  if (!modal) return
+
+  readerBookId = book.gutenberg
+  title.textContent = book.title || ''
+  author.textContent = book.author || ''
+  body.innerHTML = `
+    <div class="reader-loading">
+      <div class="loader"><div class="loader-book"><i class="fas fa-book"></i></div></div>
+      <p>Загружаем текст...</p>
+    </div>
+  `
+  status.textContent = ''
+  modal.classList.add('active')
+  document.body.style.overflow = 'hidden'
+
+  if (!book.gutenberg || book.gutenberg <= 0) {
+    body.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Текст недоступен</p></div>'
+    return
+  }
+
+  fetchReaderText(book.gutenberg, body, status)
+}
+
+function closeReader() {
+  const modal = $1('#readerModal')
+  if (modal) modal.classList.remove('active')
+  document.body.style.overflow = ''
+  readerBookId = null
+}
+
+async function fetchReaderText(id, bodyEl, statusEl) {
+  const url = `https://www.gutenberg.org/cache/epub/${id}/pg${id}.txt`
+  try {
+    const ctrl = new AbortController()
+    const to = setTimeout(() => ctrl.abort(), 15000)
+    const res = await fetch(url, { signal: ctrl.signal })
+    clearTimeout(to)
+    if (!res.ok || !res.headers.get('content-type')?.includes('text')) {
+      throw new Error(`HTTP ${res.status}`)
+    }
+    let text = await res.text()
+    text = processGutenbergText(text)
+    renderReaderText(text, bodyEl, statusEl, id)
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      bodyEl.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Превышено время ожидания</p></div>'
+    } else {
+      bodyEl.innerHTML = '<div class="reader-loading"><p style="color:var(--red)">Не удалось загрузить текст</p></div>'
+    }
+  }
+}
+
+function processGutenbergText(text) {
+  const startMarker = text.indexOf('*** START OF')
+  const endMarker = text.indexOf('*** END OF')
+  let content
+  if (startMarker >= 0 && endMarker > startMarker) {
+    const start = text.indexOf('\n', startMarker) + 1
+    content = text.substring(start, endMarker)
+  } else {
+    content = text
+  }
+  content = content
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+  return content
+}
+
+function renderReaderText(text, bodyEl, statusEl, id) {
+  const paragraphs = text.split(/\n\n+/).filter(p => p.trim())
+  if (paragraphs.length === 0) {
+    bodyEl.innerHTML = '<div class="reader-loading"><p style="color:var(--text-muted)">Текст пуст</p></div>'
+    return
+  }
+
+  const headerMark = `<div class="reader-header-mark">— Project Gutenberg eBook #${id} —</div>`
+  const footerMark = `<div class="reader-footer-mark">— Конец текста —</div>`
+  const bodyHTML = paragraphs.map(p => `<p>${escape(p.trim())}</p>`).join('')
+
+  bodyEl.innerHTML = headerMark + bodyHTML + footerMark
+  statusEl.textContent = `${paragraphs.length} абзацев`
+  bodyEl.scrollTop = 0
 }
 
 function toast(msg, type = 'info') {

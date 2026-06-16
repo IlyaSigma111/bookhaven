@@ -148,6 +148,28 @@
 
   <div class="toast-container" id="toastContainer"></div>
 
+  <div class="reader-modal" id="readerModal">
+    <div class="reader-overlay" id="readerOverlay"></div>
+    <div class="reader-container">
+      <div class="reader-header">
+        <div class="reader-meta">
+          <h3 class="reader-title" id="readerTitle"></h3>
+          <span class="reader-author" id="readerAuthor"></span>
+        </div>
+        <div class="reader-actions">
+          <span class="reader-status" id="readerStatus"></span>
+          <button class="reader-close" id="readerClose"><i class="fas fa-times"></i></button>
+        </div>
+      </div>
+      <div class="reader-body" id="readerBody">
+        <div class="reader-loading">
+          <div class="loader"><div class="loader-book"><i class="fas fa-book"></i></div></div>
+          <p>Загружаем текст...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="js/app.js"></script>
 </body>
