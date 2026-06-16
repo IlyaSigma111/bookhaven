@@ -87,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initFormatToggle()
   initArchiveBtn()
   initReader()
+  initDetail()
 })
 
 function initCursorGlow() {
@@ -294,7 +295,11 @@ function createBookCard(book) {
       </div>
     </div>
   `
-  card.querySelector('.read-btn')?.addEventListener('click', () => openReader(book))
+  card.querySelector('.read-btn')?.addEventListener('click', (e) => { e.stopPropagation(); openReader(book) })
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('button, a, .format-badge')) return
+    openDetail(book)
+  })
   return card
 }
 
@@ -635,6 +640,129 @@ function closeReader() {
   if (modal) modal.classList.remove('active')
   document.body.style.overflow = ''
   readerBookId = null
+}
+
+/* Detail Modal */
+const reviews = {}
+
+function initDetail() {
+  const overlay = $1('#detailOverlay')
+  const close = $1('#detailClose')
+  if (overlay) overlay.addEventListener('click', closeDetail)
+  if (close) close.addEventListener('click', closeDetail)
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeDetail()
+  })
+}
+
+function openDetail(book) {
+  const modal = $1('#detailModal')
+  const inner = $1('#detailInner')
+  if (!modal || !inner) return
+
+  const { from, to } = getCoverColor(book.genres)
+  const genres = getGenres(book)
+  const hasGut = book.gutenberg > 0
+  const hasIa = book.ia && book.ia.length > 0
+  const canRead = hasGut || hasIa
+  const stars = renderStars(book.rating)
+  const rating = book.rating ?? 0
+  const coverStyle = book.cover_url
+    ? `background-image:url('${book.cover_url}');background-size:cover;background-position:center`
+    : `background:linear-gradient(135deg,${from},${to})`
+  const pageUrl = hasGut
+    ? `https://www.gutenberg.org/ebooks/${book.gutenberg}`
+    : (hasIa ? `https://archive.org/details/${book.ia}` : null)
+
+  const formatLinks = ['txt', 'epub', 'mobi'].map(f => {
+    const url = hasGut ? getFormatUrl(book, f) : null
+    const icon = FORMAT_ICONS[f] || 'fa-file'
+    if (!url) return ''
+    return `<a class="format-badge ${f}" href="${url}" target="_blank" rel="noopener" title="Скачать ${f.toUpperCase()}"><i class="fas ${icon}"></i> ${f.toUpperCase()}</a>`
+  }).join('')
+
+  const reviewList = (reviews[book.id] || []).map(r => `
+    <div class="review-item">
+      <div class="review-author">${escape(r.author)}</div>
+      <div class="review-text">${escape(r.text)}</div>
+      <div class="review-date">${r.date}</div>
+    </div>
+  `).join('')
+
+  inner.innerHTML = `
+    <div class="detail-cover">
+      <div class="cover-bg" style="${coverStyle}"></div>
+      <div class="cover-pattern"></div>
+      ${book.cover_url ? '' : '<div class="cover-icon"><i class="fas fa-book-open"></i></div>'}
+    </div>
+    <div class="detail-header">
+      <h2 class="detail-title">${escape(book.title)}</h2>
+      <p class="detail-author">${escape(book.author)}</p>
+      <p class="detail-year">${book.year > 0 ? escape(book.year.toString()) : ''}</p>
+    </div>
+    <div class="detail-rating">
+      <div class="rating-stars">${stars}</div>
+      <span class="rating-number">${rating.toFixed(1)}</span>
+    </div>
+    <div class="detail-actions">
+      ${canRead ? `<button class="format-badge read-btn" style="padding:8px 20px;font-size:0.85rem"><i class="fas fa-book-open-reader"></i> Читать</button>` : ''}
+      ${formatLinks}
+      ${pageUrl ? `<a class="format-badge" href="${pageUrl}" target="_blank" rel="noopener" style="padding:8px 16px;font-size:0.8rem"><i class="fas fa-external-link-alt"></i> Открыть в источнике</a>` : ''}
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title"><i class="fas fa-tags"></i> Жанры</div>
+      <div class="detail-genres">${genres.map(g => `<span class="book-tag">${escape(g)}</span>`).join('')}</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title"><i class="fas fa-align-left"></i> Описание</div>
+      <p class="detail-description">${escape(book.description || 'Описание отсутствует')}</p>
+    </div>
+    <div class="detail-meta-grid">
+      <div class="detail-meta-item">
+        <div class="meta-value">${book.pages || '—'}</div>
+        <div class="meta-label">Страниц</div>
+      </div>
+      <div class="detail-meta-item">
+        <div class="meta-value">${book.year > 0 ? book.year : '—'}</div>
+        <div class="meta-label">Год</div>
+      </div>
+      <div class="detail-meta-item">
+        <div class="meta-value">${rating.toFixed(1)}</div>
+        <div class="meta-label">Рейтинг</div>
+      </div>
+    </div>
+    <div class="detail-reviews">
+      <div class="detail-section-title"><i class="fas fa-comments"></i> Отзывы</div>
+      <div class="review-list" id="reviewList">${reviewList || '<div class="review-placeholder"><i class="fas fa-comment-dots"></i><p>Пока нет отзывов. Будьте первым!</p></div>'}</div>
+      <div class="review-form">
+        <textarea id="reviewInput" placeholder="Напишите ваш отзыв..." maxlength="500"></textarea>
+        <button class="btn btn-primary" id="reviewSubmit"><i class="fas fa-paper-plane"></i> Отправить</button>
+      </div>
+    </div>
+  `
+
+  inner.querySelector('.read-btn')?.addEventListener('click', () => { closeDetail(); openReader(book) })
+  inner.querySelector('#reviewSubmit')?.addEventListener('click', () => {
+    const input = inner.querySelector('#reviewInput')
+    const text = input.value.trim()
+    if (!text) return
+    if (!reviews[book.id]) reviews[book.id] = []
+    reviews[book.id].push({ author: 'Читатель', text, date: new Date().toLocaleDateString('ru-RU') })
+    input.value = ''
+    openDetail(book)
+    const list = $1('#reviewList', inner)
+    if (list) list.scrollTop = list.scrollHeight
+  })
+
+  modal.classList.add('active')
+  document.body.style.overflow = 'hidden'
+  inner.scrollTop = 0
+}
+
+function closeDetail() {
+  const modal = $1('#detailModal')
+  if (modal) modal.classList.remove('active')
+  document.body.style.overflow = ''
 }
 
 async function fetchGutenbergText(id, bodyEl, statusEl) {
