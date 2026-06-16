@@ -64,14 +64,23 @@ function getCoverColor(genres) {
 }
 
 function getFormatUrl(book, format) {
-  const id = book.gutenberg
-  if (!id || id <= 0) return null
-  switch (format) {
-    case 'txt': return `https://www.gutenberg.org/cache/epub/${id}/pg${id}.txt`
-    case 'epub': return `https://www.gutenberg.org/ebooks/${id}.epub.noimages`
-    case 'mobi': return `https://www.gutenberg.org/ebooks/${id}.kindle.noimages`
-    default: return null
+  const gid = book.gutenberg
+  if (gid && gid > 0) {
+    switch (format) {
+      case 'txt': return `https://www.gutenberg.org/cache/epub/${gid}/pg${gid}.txt`
+      case 'epub': return `https://www.gutenberg.org/ebooks/${gid}.epub.noimages`
+      case 'mobi': return `https://www.gutenberg.org/ebooks/${gid}.kindle.noimages`
+    }
   }
+  const iid = book.ia
+  if (iid && iid.length > 0) {
+    switch (format) {
+      case 'txt': return `https://archive.org/download/${iid}/${iid}_djvu.txt`
+      case 'epub': return `https://archive.org/download/${iid}/${iid}.epub`
+      case 'mobi': return `https://archive.org/download/${iid}/${iid}.mobi`
+    }
+  }
+  return null
 }
 
 function $(sel, ctx) { return (ctx || document).querySelectorAll(sel) }
@@ -256,7 +265,7 @@ function createBookCard(book) {
   const pageUrl = hasGut ? `https://www.gutenberg.org/ebooks/${book.gutenberg}` : (hasIa ? `https://archive.org/details/${book.ia}` : null)
 
   const formatHTML = formats.map(f => {
-    const url = hasGut ? getFormatUrl(book, f) : null
+    const url = getFormatUrl(book, f)
     const icon = FORMAT_ICONS[f] || 'fa-file'
     if (!url) return `<span class="format-badge ${f} coming"><i class="fas ${icon}"></i> ${f.toUpperCase()}</span>`
     return `<a class="format-badge ${f}" href="${url}" target="_blank" rel="noopener" title="Скачать ${f.toUpperCase()}"><i class="fas ${icon}"></i> ${f.toUpperCase()}</a>`
@@ -549,7 +558,6 @@ function initArchiveBtn() {
       const zip = new JSZip()
       let added = 0
       for (const book of books.slice(0, 80)) {
-        if (!book.gutenberg || book.gutenberg <= 0) continue
         const url = getFormatUrl(book, state.selectedFormat)
         if (!url) continue
         try {
@@ -675,7 +683,7 @@ function openDetail(book) {
     : (hasIa ? `https://archive.org/details/${book.ia}` : null)
 
   const formatLinks = ['txt', 'epub', 'mobi'].map(f => {
-    const url = hasGut ? getFormatUrl(book, f) : null
+    const url = getFormatUrl(book, f)
     const icon = FORMAT_ICONS[f] || 'fa-file'
     if (!url) return ''
     return `<a class="format-badge ${f}" href="${url}" target="_blank" rel="noopener" title="Скачать ${f.toUpperCase()}"><i class="fas ${icon}"></i> ${f.toUpperCase()}</a>`
@@ -707,7 +715,7 @@ function openDetail(book) {
     <div class="detail-actions">
       ${canRead ? `<button class="format-badge read-btn" style="padding:8px 20px;font-size:0.85rem"><i class="fas fa-book-open-reader"></i> Читать</button>` : ''}
       ${formatLinks}
-      ${pageUrl ? `<a class="format-badge" href="${pageUrl}" target="_blank" rel="noopener" style="padding:8px 16px;font-size:0.8rem"><i class="fas fa-external-link-alt"></i> Открыть в источнике</a>` : ''}
+      ${pageUrl ? `<a class="format-badge" href="${pageUrl}" target="_blank" rel="noopener" style="padding:8px 16px;font-size:0.8rem"><i class="fas fa-external-link-alt"></i> Источник</a>` : ''}
     </div>
     <div class="detail-section">
       <div class="detail-section-title"><i class="fas fa-tags"></i> Жанры</div>
@@ -731,6 +739,21 @@ function openDetail(book) {
         <div class="meta-label">Рейтинг</div>
       </div>
     </div>
+    ${canRead ? `
+    <div class="detail-section detail-inline-reader">
+      <button class="detail-reader-toggle" id="readerToggle">
+        <i class="fas fa-book-open-reader"></i>
+        <span>Читать онлайн</span>
+        <i class="fas fa-chevron-down toggle-arrow"></i>
+      </button>
+      <div class="detail-reader-body" id="detailReaderBody">
+        <div class="reader-loading">
+          <div class="loader"><div class="loader-book"><i class="fas fa-book"></i></div></div>
+          <p>Загружаем текст...</p>
+        </div>
+      </div>
+    </div>
+    ` : ''}
     <div class="detail-reviews">
       <div class="detail-section-title"><i class="fas fa-comments"></i> Отзывы</div>
       <div class="review-list" id="reviewList">${reviewList || '<div class="review-placeholder"><i class="fas fa-comment-dots"></i><p>Пока нет отзывов. Будьте первым!</p></div>'}</div>
@@ -741,7 +764,7 @@ function openDetail(book) {
     </div>
   `
 
-  inner.querySelector('.read-btn')?.addEventListener('click', () => { closeDetail(); openReader(book) })
+  inner.querySelector('.read-btn')?.addEventListener('click', (e) => { e.stopPropagation(); closeDetail(); openReader(book) })
   inner.querySelector('#reviewSubmit')?.addEventListener('click', () => {
     const input = inner.querySelector('#reviewInput')
     const text = input.value.trim()
@@ -753,6 +776,21 @@ function openDetail(book) {
     const list = $1('#reviewList', inner)
     if (list) list.scrollTop = list.scrollHeight
   })
+
+  const toggle = inner.querySelector('#readerToggle')
+  const readerBody = inner.querySelector('#detailReaderBody')
+  if (toggle && readerBody) {
+    let loaded = false
+    toggle.addEventListener('click', () => {
+      const isOpen = readerBody.classList.toggle('open')
+      toggle.querySelector('.toggle-arrow').style.transform = isOpen ? 'rotate(180deg)' : ''
+      if (isOpen && !loaded) {
+        loaded = true
+        if (hasGut) fetchGutenbergText(book.gutenberg, readerBody, null)
+        else if (hasIa) fetchIaText(book.ia, readerBody, null, book)
+      }
+    })
+  }
 
   modal.classList.add('active')
   document.body.style.overflow = 'hidden'
@@ -803,6 +841,7 @@ async function fetchIaText(iaId, bodyEl, statusEl, book) {
             <i class="fas fa-external-link-alt"></i> Открыть на Archive.org
           </a>
         </div>`
+      if (statusEl) statusEl.textContent = '✗'
       return
     }
     const clean = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
@@ -815,6 +854,7 @@ async function fetchIaText(iaId, bodyEl, statusEl, book) {
           <i class="fas fa-external-link-alt"></i> Открыть на Archive.org
         </a>
       </div>`
+    if (statusEl) statusEl.textContent = '✗'
   }
 }
 
@@ -842,12 +882,12 @@ function renderReaderText(text, bodyEl, statusEl, id) {
     return
   }
 
-  const headerMark = `<div class="reader-header-mark">— Project Gutenberg eBook #${id} —</div>`
+  const headerMark = `<div class="reader-header-mark">— Текст —</div>`
   const footerMark = `<div class="reader-footer-mark">— Конец текста —</div>`
   const bodyHTML = paragraphs.map(p => `<p>${escape(p.trim())}</p>`).join('')
 
   bodyEl.innerHTML = headerMark + bodyHTML + footerMark
-  statusEl.textContent = `${paragraphs.length} абзацев`
+  if (statusEl) statusEl.textContent = `${paragraphs.length} абзацев`
   bodyEl.scrollTop = 0
 }
 
